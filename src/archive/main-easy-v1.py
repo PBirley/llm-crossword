@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from openai import AzureOpenAI
 from src.crossword.utils import load_puzzle
 from langchain.chat_models import init_chat_model
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, Field
 import json
 
 
@@ -20,29 +20,28 @@ llm = init_chat_model(
 
 def guess_crossword(clue: str, length: int) -> str:
     class GuessRequest(BaseModel):
+        """You are an expert crossword solver. Given a clue and the length of the answer, provide your best guess."""
+
         guess: str = Field(
             ...,
             description="You are an expert crossword solver. Given a clue and the length of the answer, provide your best guess.",
-            min_length=length,
-            max_length=length,
-            pattern=rf"^[A-Za-z]{{{length}}}$",
+            length=length,
         )
 
     expert_guesser = llm.with_structured_output(GuessRequest)
 
     guess = expert_guesser.invoke(
-        json.dumps({"clue": clue, "number of characters": length}, indent=2)
+        json.dumps({"clue": clue, "length": length}, indent=2)
     )
     return guess.guess.upper()
 
 
 # Load the puzzle
-puzzle = load_puzzle("data/medium.json")
+puzzle = load_puzzle("data/easy.json")
 
 
 # Generate a guess for each clue
 for clue in puzzle.clues:
-    print(clue)
     print(f"--- Guessing for clue: {clue.text} ---")
     guess = guess_crossword(clue.text, clue.length)
     print(f"Guess: {guess}")
