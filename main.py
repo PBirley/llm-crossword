@@ -2,60 +2,63 @@ import os
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 from src.crossword.utils import load_puzzle
+from langchain.chat_models import init_chat_model
+from pydantic import BaseModel, Field
+import json
+
 
 # Load environment variables from .env file
 load_dotenv()
 
+
+llm = init_chat_model(
+    "openai:gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0.0,
+)
+
+
+def guess_crossword(clue: str, length: int) -> str:
+    class GuessRequest(BaseModel):
+        """You are an expert crossword solver. Given a clue and the length of the answer, provide your best guess."""
+
+        guess: str = Field(
+            ...,
+            description="You are an expert crossword solver. Given a clue and the length of the answer, provide your best guess.",
+            length=length,
+        )
+
+    expert_guesser = llm.with_structured_output(GuessRequest)
+
+    guess = expert_guesser.invoke(
+        json.dumps({"clue": clue, "length": length}, indent=2)
+    )
+    return guess.guess.upper()
+
+
 # Load the puzzle
 puzzle = load_puzzle("data/easy.json")
 
-print('--- Clues ---')
-clue = puzzle.clues[0]
-print(clue)
 
-print('--- Set a guess ---')
-puzzle.set_clue_chars(puzzle.clues[0], ["a", "b", "c"])
-print(puzzle)
+# Generate a guess for each clue
+for clue in puzzle.clues:
+    print(f"--- Guessing for clue: {clue.text} ---")
+    guess = guess_crossword(clue.text, clue.length)
+    print(f"Guess: {guess}")
 
-print('--- Undo ---')
-puzzle.undo()
-print(puzzle)
+    print("--- Set a guess ---")
+    puzzle.set_clue_chars(clue, list(guess))
+    print(puzzle)
 
-print('--- Set a guess for clue 1 ---')
-puzzle.set_clue_chars(puzzle.clues[0], ["c", "a", "t"])
 
-print('--- Set a guess for clue 2 ---')
-puzzle.set_clue_chars(puzzle.clues[1], ["c", "o", "w"])
-
-print('--- Completed all? ---')
 print(puzzle.validate_all())
-print(puzzle)
 
-print('--- Set a guess for clue 3 ---')
-puzzle.set_clue_chars(puzzle.clues[2], ["t", "e", "a","r"])
 
-print('--- Completed all? ---')
-print(puzzle.validate_all())
-print(puzzle)
+# See if there are any conflicting guesses
+# In which case, resolve the conflict
 
-print('--- Reset ---')
-puzzle.reset()
-print(puzzle)
+# Once resolved submit the guess
 
-# grid history
 
-print('--- OpenAI Hello World ---')
-def openai_hello_world():
-    client = AzureOpenAI(
-        api_version=os.getenv("OPENAI_API_VERSION"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        api_key=os.getenv("AZURE_OPENAI_API_KEY")
-    )
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": "You are a helpful assistant."}, 
-                  {"role": "user", "content": "Hello!"}]
-    )
-    return response.choices[0].message.content
-
-print(openai_hello_world())
+# ----
+# is there an agentic approach to this?
